@@ -24,17 +24,22 @@ type EPlanningAdapter struct {
 }
 
 type ePlanningRequest struct {
-	id         string
-	userAgent  string
-	ip         string
-	bidderCode string
-	isSecure   bool
-	referer    string
+	id      string
+	user    *ePlanningUser
+	adUnits []*ePlanningAdUnit
+}
+
+type ePlanningUser struct {
 	userId     string
-	adUnits    []*ePlanningAdUnit
+	userAgent  string
+	clientIp   string
+	urlId      string
+	locationId string
+	connType   string
 }
 
 type ePlanningAdUnit struct {
+	id             string
 	Currency       string
 	Bidfloor       string
 	Price          float64
@@ -42,6 +47,20 @@ type ePlanningAdUnit struct {
 	Type           string
 	SpaceId        float64
 	Client         string
+	Video          *ePlanningVideo
+	Banner         *ePlanningBanner
+}
+
+type ePlanningVideo struct {
+	Weight         int
+	Height         int
+	ScreenPosition string
+}
+
+type ePlanningBanner struct {
+	Weight         int
+	Height         int
+	ScreenPosition string
 }
 
 type ePlanningBid struct {
@@ -75,7 +94,6 @@ func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*a
 func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*ePlanningRequest, []error) {
 	adUnits := make([]*ePlanningAdUnit, 0, len(request.Imp))
 	errors := make([]error, 0, len(request.Imp))
-	secure := false
 	for _, imp := range request.Imp {
 
 		params, _, _, err := jsonparser.Get(imp.Ext, "bidder")
@@ -87,10 +105,6 @@ func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*ePlanningRequest, 
 		if err := json.Unmarshal(params, &ePlanningAdUnit); err != nil {
 			errors = append(errors, err)
 			continue
-		}
-
-		if !secure && imp.Secure != nil && *imp.Secure == 1 {
-			secure = true
 		}
 
 		ePlanningAdUnit.bidId = imp.ID
