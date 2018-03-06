@@ -18,9 +18,8 @@ import (
 )
 
 type EPlanningAdapter struct {
-	http    *adapters.HTTPAdapter
-	URI     string
-	version string
+	http *adapters.HTTPAdapter
+	URI  string
 }
 
 type ePlanningRequest struct {
@@ -31,13 +30,22 @@ type ePlanningRequest struct {
 
 type ePlanningUser struct {
 	userId     string
-	userAgent  string
 	clientIp   string
-	urlId      string
-	locationId string
-	connType   string
+	urlId      string //preguntar como se saca
+	locationId string //preguntar como se saca
+	connType   string //preguntar como se saca
 }
 
+type ePlanningBid struct {
+	Id       string  `json:"id,omitempty"`
+	BidId    string  `json:"bidid,omitempty"`
+	Price    float64 `json:"price,omitempty"`
+	Currency string  `json:"cur,omitempty"`
+	Width    uint64  `json:"w,omitempty"`
+	Height   uint64  `json:"h,omitempty"`
+	DealId   string  `json:"dealid,omitempty"`
+	Seat     string  `seat:"seat,omitempty"`
+}
 type ePlanningAdUnit struct {
 	id             string
 	Currency       string
@@ -63,16 +71,6 @@ type ePlanningBanner struct {
 	ScreenPosition string
 }
 
-type ePlanningBid struct {
-	ResponseType string  `json:"response,omitempty"`
-	Banner       string  `json:"banner,omitempty"`
-	Price        float64 `json:"win_bid,omitempty"`
-	Currency     string  `json:"win_cur,omitempty"`
-	Width        uint64  `json:"width,omitempty"`
-	Height       uint64  `json:"height,omitempty"`
-	DealId       string  `json:"deal_id,omitempty"`
-}
-
 func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*adapters.RequestData, []error) {
 	adformRequest, errors := openRtbToEPlanningRequest(request)
 	if len(adformRequest.adUnits) == 0 {
@@ -80,10 +78,9 @@ func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*a
 	}
 
 	requestData := adapters.RequestData{
-		Method:  "GET",
-		Uri:     adformRequest.buildAdformUrl(a),
-		Body:    nil,
-		Headers: adformRequest.buildAdformHeaders(a),
+		Method: "POST",
+		Uri:    adapter.URI,
+		Body:   adformRequest,
 	}
 
 	requests := []*adapters.RequestData{&requestData}
@@ -92,6 +89,7 @@ func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*a
 }
 
 func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*ePlanningRequest, []error) {
+
 	adUnits := make([]*ePlanningAdUnit, 0, len(request.Imp))
 	errors := make([]error, 0, len(request.Imp))
 	for _, imp := range request.Imp {
@@ -106,29 +104,70 @@ func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*ePlanningRequest, 
 			errors = append(errors, err)
 			continue
 		}
-
-		ePlanningAdUnit.bidId = imp.ID
-		ePlanningAdUnit.adUnitCode = imp.ID
 		adUnits = append(adUnits, &ePlanningAdUnit)
 	}
-
-	referer := ""
-	if request.Site != nil {
-		referer = request.Site.Page
-	}
-
-	tid := ""
-	if request.Source != nil {
-		tid = request.Source.TID
-	}
-
 	return &ePlanningRequest{
-		adUnits:   adUnits,
-		ip:        request.Device.IP,
-		userAgent: request.Device.UA,
-		isSecure:  secure,
-		referer:   referer,
-		userId:    request.User.BuyerUID,
-		tid:       tid,
+		agent:   request.Device,
+		adUnits: adUnits,
+		user:    request.User,
 	}, errors
+}
+
+func (adapter *EPlanningAdapter) MakeBids(internalRequest *openrtb.BidRequest, externalRequest *adapters.RequestData, response *adapters.ResponseData) ([]*adapters.TypedBid, []error) {
+	if response.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+
+	if response.StatusCode != http.StatusOK {
+		return nil, []error{fmt.Errorf("unexpected status code: %d. Run with request.debug = 1 for more info", response.StatusCode)}
+	}
+
+	ePlanningOutput, err := parseEPlanningBids(response.Body)
+	if err != nil {
+		return nil, []error{err}
+	}
+
+	bids := toOpenRtbBids(ePlanningOutput, internalRequest)
+
+	return bids, nil
+}
+
+func NewEPlanningBidder(client *http.Client, endpoint string) *EPlanningAdapter {
+	adapter := &adapters.HTTPAdapter{Client: client}
+
+	return &EPlanningAdapter{
+		http: a,
+		URI:  endpoint,
+	}
+}
+
+func parseEPlanningBids(response []byte) ([]*ePlanningBid, error) {
+	var bids []*ePlanningBid
+	if err := json.Unmarshal(response, &bids); err != nil {
+		return nil, err
+	}
+
+	return bids, nil
+}
+
+func toOpenRtbBids(ePlanningBids []*ePlanningBid, r *openrtb.BidRequest) []*adapters.TypedBid {
+	bids := make([]*adapters.TypedBid, 0, len(ePlanningBids))
+
+	for i, bid := range ePlanningBids {
+		openRtbBid := openrtb.Bid{
+			ID:       r.Imp[i].ID,
+			ImpID:    r.Imp[i].ID,
+			Price:    bid.Price,
+			AdM:      bid.Banner,
+			W:        bid.Width,
+			H:        bid.Height,
+			DealID:   bid.DealId,
+			BidId:    bid.BidId,
+			Currency: bid.Currency,
+		}
+
+		bids = append(openRtbBid)
+	}
+
+	return bids
 }
