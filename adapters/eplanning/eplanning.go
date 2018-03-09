@@ -1,20 +1,12 @@
 package eplanning
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
-	"strings"
 
-	"github.com/buger/jsonparser"
+	"fmt"
 	"github.com/mxmCherry/openrtb"
 	"github.com/prebid/prebid-server/adapters"
-	"github.com/prebid/prebid-server/openrtb_ext"
-	"github.com/prebid/prebid-server/pbs"
-	"golang.org/x/net/context/ctxhttp"
 )
 
 type EPlanningAdapter struct {
@@ -22,12 +14,13 @@ type EPlanningAdapter struct {
 	URI  string
 }
 
-type ePlanningRequest struct {
+type EPlanningRequest struct {
 	id      string
-	user    *ePlanningUser
-	adUnits []*ePlanningAdUnit
+	user    *openrtb.User
+	adUnits []*EPlanningAdUnit
 }
 
+/*
 type ePlanningUser struct {
 	userId     string
 	clientIp   string
@@ -35,52 +28,43 @@ type ePlanningUser struct {
 	locationId string //preguntar como se saca
 	connType   string //preguntar como se saca
 }
-
-type ePlanningBid struct {
-	Id       string  `json:"id,omitempty"`
-	BidId    string  `json:"bidid,omitempty"`
-	Price    float64 `json:"price,omitempty"`
-	Currency string  `json:"cur,omitempty"`
-	Width    uint64  `json:"w,omitempty"`
-	Height   uint64  `json:"h,omitempty"`
-	DealId   string  `json:"dealid,omitempty"`
-	Seat     string  `seat:"seat,omitempty"`
-}
-type ePlanningAdUnit struct {
-	id             string
-	Currency       string
-	Bidfloor       string
-	Price          float64
-	IsInterstitial bool
-	Type           string
-	SpaceId        float64
-	Client         string
-	Video          *ePlanningVideo
-	Banner         *ePlanningBanner
+*/
+type EPlanningBid struct {
+	Id     string  `json:"id"`
+	Price  float64 `json:"price,omitempty"`
+	Width  uint64  `json:"w,omitempty"`
+	Height uint64  `json:"h,omitempty"`
+	DealId string  `json:"dealid,omitempty"`
+	Seat   string  `seat:"seat,omitempty"`
 }
 
-type ePlanningVideo struct {
-	Weight         int
-	Height         int
-	ScreenPosition string
-}
-
-type ePlanningBanner struct {
-	Weight         int
-	Height         int
-	ScreenPosition string
+type EPlanningAdUnit struct {
+	Id       string
+	Bidfloor float64
+	Instl    int8
+	//	Type           string
+	//	SpaceId        float64
+	//	Client         string
+	Video  *openrtb.Video
+	Banner *openrtb.Banner
 }
 
 func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*adapters.RequestData, []error) {
-	adformRequest, errors := openRtbToEPlanningRequest(request)
-	if len(adformRequest.adUnits) == 0 {
+	ePlanningRequest, errors := openRtbToEPlanningRequest(request)
+	if len(ePlanningRequest.adUnits) == 0 {
+		return nil, errors
+	}
+
+	reqJSON, err := json.Marshal(request)
+	if err != nil {
+		errors = append(errors, err)
 		return nil, errors
 	}
 
 	requestData := adapters.RequestData{
 		Method: "POST",
 		Uri:    adapter.URI,
-		Body:   adformRequest,
+		Body:   reqJSON,
 	}
 
 	requests := []*adapters.RequestData{&requestData}
@@ -88,26 +72,21 @@ func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*a
 	return requests, errors
 }
 
-func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*ePlanningRequest, []error) {
+func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*EPlanningRequest, []error) {
 
-	adUnits := make([]*ePlanningAdUnit, 0, len(request.Imp))
+	adUnits := make([]*EPlanningAdUnit, 0, len(request.Imp))
 	errors := make([]error, 0, len(request.Imp))
 	for _, imp := range request.Imp {
-
-		params, _, _, err := jsonparser.Get(imp.Ext, "bidder")
-		if err != nil {
-			errors = append(errors, err)
-			continue
-		}
-		var ePlanningAdUnit ePlanningAdUnit
-		if err := json.Unmarshal(params, &ePlanningAdUnit); err != nil {
-			errors = append(errors, err)
-			continue
+		ePlanningAdUnit := EPlanningAdUnit{
+			Id:       imp.ID,
+			Bidfloor: imp.BidFloor,
+			Instl:    imp.Instl,
+			Video:    imp.Video,
+			Banner:   imp.Banner,
 		}
 		adUnits = append(adUnits, &ePlanningAdUnit)
 	}
-	return &ePlanningRequest{
-		agent:   request.Device,
+	return &EPlanningRequest{
 		adUnits: adUnits,
 		user:    request.User,
 	}, errors
@@ -136,13 +115,13 @@ func NewEPlanningBidder(client *http.Client, endpoint string) *EPlanningAdapter 
 	adapter := &adapters.HTTPAdapter{Client: client}
 
 	return &EPlanningAdapter{
-		http: a,
+		http: adapter,
 		URI:  endpoint,
 	}
 }
 
-func parseEPlanningBids(response []byte) ([]*ePlanningBid, error) {
-	var bids []*ePlanningBid
+func parseEPlanningBids(response []byte) ([]*EPlanningBid, error) {
+	var bids []*EPlanningBid
 	if err := json.Unmarshal(response, &bids); err != nil {
 		return nil, err
 	}
@@ -150,24 +129,21 @@ func parseEPlanningBids(response []byte) ([]*ePlanningBid, error) {
 	return bids, nil
 }
 
-func toOpenRtbBids(ePlanningBids []*ePlanningBid, r *openrtb.BidRequest) []*adapters.TypedBid {
+func toOpenRtbBids(ePlanningBids []*EPlanningBid, r *openrtb.BidRequest) []*adapters.TypedBid {
 	bids := make([]*adapters.TypedBid, 0, len(ePlanningBids))
 
 	for i, bid := range ePlanningBids {
-		openRtbBid := openrtb.Bid{
-			ID:       r.Imp[i].ID,
-			ImpID:    r.Imp[i].ID,
-			Price:    bid.Price,
-			AdM:      bid.Banner,
-			W:        bid.Width,
-			H:        bid.Height,
-			DealID:   bid.DealId,
-			BidId:    bid.BidId,
-			Currency: bid.Currency,
+		if bid.Id != "" {
+			openRtbBid := openrtb.Bid{
+				ID:     bid.Id,
+				ImpID:  r.Imp[i].ID,
+				Price:  bid.Price,
+				W:      bid.Width,
+				H:      bid.Height,
+				DealID: bid.DealId,
+			}
+			bids = append(bids, &adapters.TypedBid{Bid: &openRtbBid})
 		}
-
-		bids = append(openRtbBid)
 	}
-
 	return bids
 }

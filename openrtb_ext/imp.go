@@ -2,11 +2,10 @@ package openrtb_ext
 
 // ExtImp defines the contract for bidrequest.imp[i].ext
 type ExtImp struct {
-	Prebid    *ExtImpPrebid   `json:"prebid"`
-	Appnexus  *ExtImpAppnexus `json:"appnexus"`
-	Rubicon   *ExtImpRubicon  `json:"rubicon"`
-	Adform    *ExtImpAdform   `json:"adform"`
-	Eplanning *Ext
+	Prebid   *ExtImpPrebid   `json:"prebid"`
+	Appnexus *ExtImpAppnexus `json:"appnexus"`
+	Rubicon  *ExtImpRubicon  `json:"rubicon"`
+	Adform   *ExtImpAdform   `json:"adform"`
 }
 
 // ExtImpPrebid defines the contract for bidrequest.imp[i].ext.prebid
