@@ -15,17 +15,13 @@ type aBidInfo struct {
 	deviceIP string
 	deviceUA string
 	tags     []aTagInfo
-	referrer string
 	width    uint64
 	height   uint64
-	tid      string
 	buyerUID string
-	secure   bool
 	delay    time.Duration
 }
 
 type aTagInfo struct {
-	mid      uint32
 	code     string
 	bidfloor float64
 	instl    int8
@@ -127,8 +123,6 @@ func createTestData() *aBidInfo {
 	testData := &aBidInfo{
 		deviceIP: "111.111.111.111",
 		deviceUA: "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Mobile/14E8301",
-		referrer: "http://test.com",
-		tid:      "transaction-id",
 		buyerUID: "user-id",
 		tags: []aTagInfo{
 			{code: "code1", price: 1.23, content: "banner-content1", dealId: "dealId1", bidfloor: 1, instl: 0},
@@ -148,28 +142,27 @@ func createOpenRtbRequest(testData *aBidInfo) *openrtb.BidRequest {
 				Banner:   &openrtb.Banner{},
 				BidFloor: testData.tags[0].bidfloor,
 				Instl:    testData.tags[0].instl,
+				Ext:      openrtb.RawJSON(`{"bidder": { "ssp_espacio_id": "32344" }}`),
 			},
 			{
 				ID:     testData.tags[1].code,
 				Banner: &openrtb.Banner{},
+				Ext:    openrtb.RawJSON(`{"bidder": { "ssp_espacio_id": "32345" }}`),
 			},
 			{
 				ID:       testData.tags[2].code,
 				Banner:   &openrtb.Banner{},
 				BidFloor: testData.tags[2].bidfloor,
 				Instl:    testData.tags[2].instl,
+				Ext:      openrtb.RawJSON(`{"bidder": { "ssp_espacio_id": "32346" }}`),
 			},
 		},
-		Site: &openrtb.Site{
-			Page: testData.referrer,
-		},
+		Site: &openrtb.Site{},
 		Device: &openrtb.Device{
 			UA: testData.deviceUA,
 			IP: testData.deviceIP,
 		},
-		Source: &openrtb.Source{
-			TID: testData.tid,
-		},
+		Source: &openrtb.Source{},
 		User: &openrtb.User{
 			BuyerUID: testData.buyerUID,
 		},

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/mxmCherry/openrtb"
 	"github.com/prebid/prebid-server/adapters"
+	"github.com/prebid/prebid-server/openrtb_ext"
 )
 
 type EPlanningAdapter struct {
@@ -17,36 +18,25 @@ type EPlanningAdapter struct {
 type EPlanningRequest struct {
 	id      string
 	user    *openrtb.User
+	device  *openrtb.Device
 	adUnits []*EPlanningAdUnit
 }
 
-/*
-type ePlanningUser struct {
-	userId     string
-	clientIp   string
-	urlId      string //preguntar como se saca
-	locationId string //preguntar como se saca
-	connType   string //preguntar como se saca
-}
-*/
 type EPlanningBid struct {
 	Id     string  `json:"id"`
 	Price  float64 `json:"price,omitempty"`
 	Width  uint64  `json:"w,omitempty"`
 	Height uint64  `json:"h,omitempty"`
 	DealId string  `json:"dealid,omitempty"`
-	Seat   string  `seat:"seat,omitempty"`
 }
 
 type EPlanningAdUnit struct {
-	Id       string
-	Bidfloor float64
-	Instl    int8
-	//	Type           string
-	//	SpaceId        float64
-	//	Client         string
-	Video  *openrtb.Video
-	Banner *openrtb.Banner
+	Id         string
+	Bidfloor   float64
+	Instl      int8
+	SspSpaceId int `json:"ssp_espacio_id,omitempty"`
+	Video      *openrtb.Video
+	Banner     *openrtb.Banner
 }
 
 func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*adapters.RequestData, []error) {
@@ -77,18 +67,26 @@ func openRtbToEPlanningRequest(request *openrtb.BidRequest) (*EPlanningRequest, 
 	adUnits := make([]*EPlanningAdUnit, 0, len(request.Imp))
 	errors := make([]error, 0, len(request.Imp))
 	for _, imp := range request.Imp {
+		var params openrtb_ext.ExtImpEPlanning
+		err := json.Unmarshal(imp.Ext, &params)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
 		ePlanningAdUnit := EPlanningAdUnit{
-			Id:       imp.ID,
-			Bidfloor: imp.BidFloor,
-			Instl:    imp.Instl,
-			Video:    imp.Video,
-			Banner:   imp.Banner,
+			Id:         imp.ID,
+			Bidfloor:   imp.BidFloor,
+			Instl:      imp.Instl,
+			Video:      imp.Video,
+			Banner:     imp.Banner,
+			SspSpaceId: params.SspSpaceId,
 		}
 		adUnits = append(adUnits, &ePlanningAdUnit)
 	}
 	return &EPlanningRequest{
 		adUnits: adUnits,
 		user:    request.User,
+		device:  request.Device,
 	}, errors
 }
 
