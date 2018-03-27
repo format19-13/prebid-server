@@ -53,7 +53,7 @@ func (adapter *EPlanningAdapter) MakeRequests(request *openrtb.BidRequest) ([]*a
 
 	requestData := adapters.RequestData{
 		Method: "POST",
-		Uri:    "http://ads.us.e-planning.net/dsp/obr",
+		Uri:    adapter.URI,
 		Body:   reqJSON,
 	}
 
