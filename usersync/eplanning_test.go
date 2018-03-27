@@ -15,7 +15,4 @@ func TestEPlanningSyncer(t *testing.T) {
 	if info.Type != "redirect" {
 		t.Fatalf("should be redirect")
 	}
-	if info.SupportCORS != false {
-		t.Fatalf("should have been false")
-	}
 }
